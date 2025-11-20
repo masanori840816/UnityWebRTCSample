@@ -1,2 +1,5 @@
 ﻿<Solution>
+  <Project Path="Unity.WebRTC.Samples.Editror.csproj" />
+  <Project Path="Unity.WebRTC.Samples.csproj" />
+  <Project Path="Assembly-CSharp.csproj" />
 </Solution>
