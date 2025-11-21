@@ -13,6 +13,7 @@ public class WebAccessor: IDisposable
     public WebAccessor()
     {
         this.httpClient = new HttpClient();
+        this.httpClient.Timeout = Timeout.InfiniteTimeSpan;
     }
     public async void ConnectAsync(string baseUrl, string userName, 
         SynchronizationContext mainContext, CancellationToken cancellationToken)
@@ -38,8 +39,7 @@ public class WebAccessor: IDisposable
                             mainContext.Post(_ => {
                                 OnMessage?.Invoke(line);
                             }, null);
-                        }                        
-                        await Task.Delay(100);
+                        }
                     }
                 }
             }
