@@ -1,10 +1,13 @@
-using UnityEngine;
+using System;
 using System.Collections;
 using System.Threading;
 using System.Threading.Tasks;
-
+using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using Unity.WebRTC;
 using System.Linq;
+
+using TMPro;
 
 public class Main : MonoBehaviour
 {
@@ -12,17 +15,23 @@ public class Main : MonoBehaviour
     private WebRTCController _webrtcCtrl = null;
 
     private WebCamTexture _webCamTexture;
+    private RenderTexture _renderTexture;
     private AudioStreamTrack _audioStreamTrack;
     private VideoStreamTrack _videoStreamTrack;
     private MediaStream _localStream;
     private SynchronizationContext _mainContext;
     private const string ServerURL = "http://localhost:8080";
 
+    [SerializeField]
+    private TextMeshProUGUI messageText;
+    [SerializeField] private AudioSource _remoteAudioSource;
+
     private void Start()
     {
         _mainContext = SynchronizationContext.Current;
         _webAccessor = new WebAccessor();
         _webrtcCtrl = new WebRTCController();
+        _webrtcCtrl.Init(_remoteAudioSource);
         StartCoroutine(WebRTC.Update());
         StartCoroutine(InitializeAndConnectSequence());
     }
@@ -60,6 +69,7 @@ public class Main : MonoBehaviour
         };
 
         _webAccessor.OnMessage = (message) => {
+            messageText.text = $"[{DateTime.Now:HHmmssfff}]{message}";
             HandleMessage(message);
         };
 
@@ -71,6 +81,16 @@ public class Main : MonoBehaviour
                 _mainContext, cts.Token);
         });
     }
+    void Update()
+    {
+        // WebCamTextureが初期化され、再生中の場合のみ実行
+        if (_webCamTexture != null && _webCamTexture.isPlaying && _renderTexture != null)
+        {
+            // 毎フレーム、WebCamTextureの内容をRenderTextureにコピーし、フォーマットを変換
+            // VideoStreamTrackはこのRenderTextureを参照し続けるため、映像が更新される
+            Graphics.Blit(_webCamTexture, _renderTexture);
+        }
+    }
     private void OnDestroy()
     {
         _webAccessor?.Dispose();
@@ -78,6 +98,11 @@ public class Main : MonoBehaviour
         _audioStreamTrack?.Dispose();
         _videoStreamTrack?.Dispose();
         _localStream?.Dispose();
+        if (_renderTexture != null)
+        {
+            _renderTexture.Release();
+            Destroy(_renderTexture);
+        }
     }
     private void HandleMessage(string receivedData)
     {
@@ -123,7 +148,6 @@ public class Main : MonoBehaviour
     public IEnumerator StartLocalMediaAndAddTracks()
     {
         yield return StartCoroutine(InitializeWebCam());
-
         InitializeMicrophone();
 
         _localStream = new MediaStream();
@@ -155,14 +179,20 @@ public class Main : MonoBehaviour
         _webCamTexture = new WebCamTexture(device.name, 1280, 720, 30);
         _webCamTexture.Play();
 
-        // カメラが起動するのを待つ
-        while (!_webCamTexture.didUpdateThisFrame)
-        {
-            yield return null;
-        }
+        yield return new WaitUntil(() => _webCamTexture.didUpdateThisFrame);
+
+        _renderTexture = new RenderTexture(
+            _webCamTexture.width, 
+            _webCamTexture.height, 
+            0, // デプスビットは不要
+            GraphicsFormat.B8G8R8A8_SRGB
+        );
+        _renderTexture.Create();
+        // 3. WebCamTextureの内容をRenderTextureにコピー（Blitによるフォーマット調整）
+        Graphics.Blit(_webCamTexture, _renderTexture);
 
         // 映像トラックを生成
-        _videoStreamTrack = new VideoStreamTrack(_webCamTexture);
+        _videoStreamTrack = new VideoStreamTrack(_renderTexture);
         Debug.Log("WebCam initialized and VideoStreamTrack created.");
     }    
     private void InitializeMicrophone()

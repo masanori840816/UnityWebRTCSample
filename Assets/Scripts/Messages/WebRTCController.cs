@@ -10,9 +10,26 @@ using Unity.WebRTC;
 public class WebRTCController
 {
     private RTCPeerConnection _peerConnection = null;
+    private AudioSource _remoteAudioSource;
     public event Action<ClientMessage> OnLocalDescriptionCreated;
     public event Action<ClientMessage> OnIceCandidateCreated;
+    private RTCDataChannel _dataChannel1;
+    private RTCDataChannel _dataChannel2;
+    private RTCDataChannel _remoteDataChannel;
+    private DelegateOnMessage onDataChannelMessage;
+    private DelegateOnDataChannel onDataChannel;
 
+    public void Init(AudioSource remoteAudio)
+    {
+        _remoteAudioSource = remoteAudio;
+
+        onDataChannel = channel =>
+        {
+            _remoteDataChannel = channel;
+            _remoteDataChannel.OnMessage = onDataChannelMessage;
+        };
+        onDataChannelMessage = bytes => { Debug.Log("onDataChannelMessage:" + System.Text.Encoding.UTF8.GetString(bytes)); };
+    }
     public void Connect()
     {
         if (_peerConnection != null)
@@ -24,12 +41,30 @@ public class WebRTCController
         _peerConnection.OnIceCandidate = HandleIceCandidate;
         _peerConnection.OnConnectionStateChange = HandleConnectionStateChange;
         _peerConnection.OnTrack = HandleTrackEvent;
+        _peerConnection.OnDataChannel = onDataChannel;
+        RTCDataChannelInit conf1 = new RTCDataChannelInit();
+        conf1.id = 20;
+        _dataChannel1 = _peerConnection.CreateDataChannel("sample", conf1);
+        _dataChannel1.OnOpen = () =>
+        {
+            Debug.Log("DataChannel Open");
+        };
+        RTCDataChannelInit conf2 = new RTCDataChannelInit();
+        conf2.id = 21;
+        _dataChannel2 = _peerConnection.CreateDataChannel("sample2", conf2);
 
+        _dataChannel2.OnOpen = () =>
+        {
+            Debug.Log("DataChannel2 Open");
+        };
     }
     public void Close()
     {
         if (_peerConnection != null)
         {
+            _dataChannel1?.Close();
+            _dataChannel2?.Close();
+            _remoteDataChannel?.Close();
             _peerConnection.Close();
             _peerConnection.Dispose();
             _peerConnection = null;
@@ -80,6 +115,7 @@ public class WebRTCController
         result.iceServers = new[] { new RTCIceServer {
             urls = new[] { "stun:stun.l.google.com:19302" } 
         } };
+
         return result;
     }
     public void OnCandidateReceived(RTCIceCandidate candidate)
@@ -125,6 +161,22 @@ public class WebRTCController
         if (remoteStream != null)
         {
             Debug.Log($"Remote Track Received! Kind: {e.Track.Kind}, Stream ID: {remoteStream.Id}");
+            if (e.Track.Kind == TrackKind.Audio && _remoteAudioSource != null)
+            {
+                // RTCMediaStreamTrackをAudioStreamTrackにキャスト
+                AudioStreamTrack audioTrack = e.Track as AudioStreamTrack;
+
+                if (audioTrack != null)
+                {
+                    _remoteAudioSource.SetTrack(audioTrack);
+
+                    // 再生を開始するためにPlay()を呼び出す必要がある場合があります
+                    if (!_remoteAudioSource.isPlaying)
+                    {
+                        _remoteAudioSource.Play();
+                    }
+                }
+            }
         }
         else
         {
