@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.UI;
 using Unity.WebRTC;
 using System.Linq;
 
@@ -20,6 +21,7 @@ public class Main : MonoBehaviour
     private VideoStreamTrack _videoStreamTrack;
     private MediaStream _localStream;
     private SynchronizationContext _mainContext;
+    [SerializeField] private RawImage sourceImage;
     private const string ServerURL = "http://localhost:8080";
 
     [SerializeField]
@@ -190,7 +192,7 @@ public class Main : MonoBehaviour
         _renderTexture.Create();
         // 3. WebCamTextureの内容をRenderTextureにコピー（Blitによるフォーマット調整）
         Graphics.Blit(_webCamTexture, _renderTexture);
-
+        sourceImage.texture = _renderTexture;
         // 映像トラックを生成
         _videoStreamTrack = new VideoStreamTrack(_renderTexture);
         Debug.Log("WebCam initialized and VideoStreamTrack created.");
