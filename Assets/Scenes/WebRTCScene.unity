@@ -243,7 +243,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 300, y: -100}
-  m_SizeDelta: {x: 100, y: 100}
+  m_SizeDelta: {x: 720, y: 380}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &101400886
 MonoBehaviour:
@@ -311,6 +311,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Main
   sourceImage: {fileID: 101400886}
   messageText: {fileID: 1895362141}
+  _localAudioSource: {fileID: 1974875508}
   _remoteAudioSource: {fileID: 1311183941}
 --- !u!4 &208587099
 Transform:
@@ -915,7 +916,7 @@ GameObject:
   - component: {fileID: 1974875509}
   - component: {fileID: 1974875508}
   m_Layer: 0
-  m_Name: Audio Source
+  m_Name: LocalAudio
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

@@ -21,19 +21,25 @@ public class Main : MonoBehaviour
     private VideoStreamTrack _videoStreamTrack;
     private MediaStream _localStream;
     private SynchronizationContext _mainContext;
+    private CancellationTokenSource webAccessorCancel;
     [SerializeField] private RawImage sourceImage;
     private const string ServerURL = "http://localhost:8080";
 
     [SerializeField]
     private TextMeshProUGUI messageText;
+    
+    [SerializeField] private AudioSource _localAudioSource;
     [SerializeField] private AudioSource _remoteAudioSource;
-
+    
     private void Start()
     {
         _mainContext = SynchronizationContext.Current;
         _webAccessor = new WebAccessor();
         _webrtcCtrl = new WebRTCController();
         _webrtcCtrl.Init(_remoteAudioSource);
+        var format = WebRTC.GetSupportedRenderTextureFormat(SystemInfo.graphicsDeviceType);
+        _renderTexture = new RenderTexture(1280, 720, 0, format);
+        _renderTexture.Create();
         StartCoroutine(WebRTC.Update());
         StartCoroutine(InitializeAndConnectSequence());
     }
@@ -85,11 +91,8 @@ public class Main : MonoBehaviour
     }
     void Update()
     {
-        // WebCamTextureが初期化され、再生中の場合のみ実行
         if (_webCamTexture != null && _webCamTexture.isPlaying && _renderTexture != null)
         {
-            // 毎フレーム、WebCamTextureの内容をRenderTextureにコピーし、フォーマットを変換
-            // VideoStreamTrackはこのRenderTextureを参照し続けるため、映像が更新される
             Graphics.Blit(_webCamTexture, _renderTexture);
         }
     }
@@ -110,18 +113,18 @@ public class Main : MonoBehaviour
     {
         string[] splitted = receivedData.Split("data:");
 
-        if(splitted.Length <= 1)
+        if (splitted.Length <= 1)
         {
             Debug.Log($"Invalid {receivedData}");
             return;
         }
         ClientMessage message = JsonUtility.FromJson<ClientMessage>(splitted[1]);
-        if(message == null)
+        if (message == null)
         {
             Debug.Log($"Failed deserialized: {receivedData}");
             return;
         }
-        switch(message.@event)
+        switch (message.@event)
         {
             case "offer":
                 RTCSessionDescription offerMessage = JsonUtility.FromJson<RTCSessionDescription>(message.data);
@@ -160,10 +163,26 @@ public class Main : MonoBehaviour
         if (_audioStreamTrack != null)
         {
             _localStream.AddTrack(_audioStreamTrack);
-        }        
+        }
+        // 4. トラックをPeerConnectionに追加
+        if (_webrtcCtrl != null)
+        {
+            // WebRTCでは、MediaStream単位ではなく、個々のトラックをAddTrackするのが一般的です。
+            if (_videoStreamTrack != null)
+            {
+                _webrtcCtrl.AddLocalTrack(_videoStreamTrack, _localStream);
+            }
+            if (_audioStreamTrack != null)
+            {
+                _webrtcCtrl.AddLocalTrack(_audioStreamTrack, _localStream);
+            }
+        }
+        else
+        {
+            Debug.LogError("WebRTCController is not initialized.");
+        }
     }
 
-    // --- Webカメラ初期化 ---
     private IEnumerator InitializeWebCam()
     {
         // 利用可能なカメラを取得
@@ -183,14 +202,6 @@ public class Main : MonoBehaviour
 
         yield return new WaitUntil(() => _webCamTexture.didUpdateThisFrame);
 
-        _renderTexture = new RenderTexture(
-            _webCamTexture.width, 
-            _webCamTexture.height, 
-            0, // デプスビットは不要
-            GraphicsFormat.B8G8R8A8_SRGB
-        );
-        _renderTexture.Create();
-        // 3. WebCamTextureの内容をRenderTextureにコピー（Blitによるフォーマット調整）
         Graphics.Blit(_webCamTexture, _renderTexture);
         sourceImage.texture = _renderTexture;
         // 映像トラックを生成
@@ -199,13 +210,6 @@ public class Main : MonoBehaviour
     }    
     private void InitializeMicrophone()
     {
-        // AudioSourceコンポーネントが必要
-        AudioSource audioSource = gameObject.GetComponent<AudioSource>();
-        if (audioSource == null)
-        {
-            audioSource = gameObject.AddComponent<AudioSource>();
-        }
-
         // 最初のマイクデバイス名を取得
         string micDeviceName = Microphone.devices.FirstOrDefault();
         if (string.IsNullOrEmpty(micDeviceName))
@@ -215,10 +219,15 @@ public class Main : MonoBehaviour
             return;
         }
 
-        audioSource.clip = Microphone.Start(micDeviceName, true, 10, AudioSettings.outputSampleRate);
-        audioSource.loop = true;
-        // audioSource.mute = true;
-        _audioStreamTrack = new AudioStreamTrack(audioSource);
         Debug.Log($"Microphone '{micDeviceName}' initialized and AudioStreamTrack created.");
+
+        _localAudioSource.clip = Microphone.Start(micDeviceName, true, 1, 48000);
+        _localAudioSource.loop = true;
+        // set the latency to “0” samples before the audio starts to play.
+        while (!(Microphone.GetPosition(micDeviceName) > 0)) { }
+
+        _localAudioSource.Play();
+        // add AudioStreamTrack
+        _audioStreamTrack = new AudioStreamTrack(_localAudioSource);
     }
 }

@@ -75,6 +75,7 @@ public class WebRTCController
     {
         if (_peerConnection != null)
         {
+            Debug.Log("RTCPeerConnection ad track." + track.Kind);
             _peerConnection.AddTrack(track, stream);
         }
     }
